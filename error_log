@@ -1,10 +1,21 @@
-[28-Nov-2025 00:44:06 Asia/Karachi] PHP Notice:  Undefined index: user_id in /home/israrlia/test.israrliaqat.shop/user/sub_orders.php on line 14
-[28-Nov-2025 00:44:07 Asia/Karachi] PHP Notice:  Undefined index: user_id in /home/israrlia/test.israrliaqat.shop/user/sub_orders.php on line 14
-[28-Nov-2025 00:44:07 Asia/Karachi] PHP Notice:  Undefined index: user_id in /home/israrlia/test.israrliaqat.shop/user/sub_orders.php on line 14
-[28-Nov-2025 00:56:16 Asia/Karachi] PHP Notice:  Undefined variable: current_page in /home/israrlia/test.israrliaqat.shop/user/_smm_footer.php on line 5
-[28-Nov-2025 00:56:16 Asia/Karachi] PHP Notice:  Undefined variable: current_page in /home/israrlia/test.israrliaqat.shop/user/_smm_footer.php on line 10
-[28-Nov-2025 00:56:16 Asia/Karachi] PHP Notice:  Undefined variable: current_page in /home/israrlia/test.israrliaqat.shop/user/_smm_footer.php on line 15
-[28-Nov-2025 00:56:16 Asia/Karachi] PHP Notice:  Undefined variable: current_page in /home/israrlia/test.israrliaqat.shop/user/_smm_footer.php on line 20
-[28-Nov-2025 00:56:16 Asia/Karachi] PHP Notice:  Undefined variable: current_page in /home/israrlia/test.israrliaqat.shop/user/_smm_footer.php on line 25
-[28-Nov-2025 20:36:23 Asia/Karachi] PHP Notice:  Undefined index: user_id in /home/israrlia/test.israrliaqat.shop/user/sub_orders.php on line 14
-[28-Nov-2025 20:39:52 Asia/Karachi] PHP Notice:  Undefined index: user_id in /home/israrlia/test.israrliaqat.shop/user/sub_orders.php on line 14
+[25-Nov-2025 02:41:05 Asia/Karachi] PHP Warning:  file_get_contents(): SSL operation failed with code 1. OpenSSL Error messages:
+error:0A000126:SSL routines::unexpected eof while reading in /home/israrlia/test.israrliaqat.shop/google_callback.php on line 29
+[25-Nov-2025 02:41:05 Asia/Karachi] PHP Warning:  file_get_contents(): SSL: Success in /home/israrlia/test.israrliaqat.shop/google_callback.php on line 29
+[25-Nov-2025 02:41:11 Asia/Karachi] PHP Warning:  file_get_contents(): SSL operation failed with code 1. OpenSSL Error messages:
+error:0A000126:SSL routines::unexpected eof while reading in /home/israrlia/test.israrliaqat.shop/google_callback.php on line 29
+[25-Nov-2025 02:41:11 Asia/Karachi] PHP Warning:  file_get_contents(): SSL: Success in /home/israrlia/test.israrliaqat.shop/google_callback.php on line 29
+[25-Nov-2025 10:53:16 Asia/Karachi] PHP Warning:  file_get_contents(): SSL operation failed with code 1. OpenSSL Error messages:
+error:0A000126:SSL routines::unexpected eof while reading in /home/israrlia/test.israrliaqat.shop/google_callback.php on line 29
+[25-Nov-2025 10:53:16 Asia/Karachi] PHP Warning:  file_get_contents(): SSL: Success in /home/israrlia/test.israrliaqat.shop/google_callback.php on line 29
+[25-Nov-2025 12:02:02 Asia/Karachi] PHP Warning:  file_get_contents(): SSL operation failed with code 1. OpenSSL Error messages:
+error:0A000126:SSL routines::unexpected eof while reading in /home/israrlia/test.israrliaqat.shop/google_callback.php on line 29
+[25-Nov-2025 12:02:02 Asia/Karachi] PHP Warning:  file_get_contents(): SSL: Success in /home/israrlia/test.israrliaqat.shop/google_callback.php on line 29
+[25-Nov-2025 12:32:28 Asia/Karachi] PHP Warning:  file_get_contents(): SSL operation failed with code 1. OpenSSL Error messages:
+error:0A000126:SSL routines::unexpected eof while reading in /home/israrlia/test.israrliaqat.shop/google_callback.php on line 29
+[25-Nov-2025 12:32:28 Asia/Karachi] PHP Warning:  file_get_contents(): SSL: Success in /home/israrlia/test.israrliaqat.shop/google_callback.php on line 29
+[25-Nov-2025 20:59:03 Asia/Karachi] PHP Warning:  file_get_contents(): SSL operation failed with code 1. OpenSSL Error messages:
+error:0A000126:SSL routines::unexpected eof while reading in /home/israrlia/test.israrliaqat.shop/google_callback.php on line 29
+[25-Nov-2025 20:59:03 Asia/Karachi] PHP Warning:  file_get_contents(): SSL: Success in /home/israrlia/test.israrliaqat.shop/google_callback.php on line 29
+[28-Nov-2025 17:23:42 Asia/Karachi] PHP Warning:  file_get_contents(): SSL operation failed with code 1. OpenSSL Error messages:
+error:0A000126:SSL routines::unexpected eof while reading in /home/israrlia/test.israrliaqat.shop/google_callback.php on line 29
+[28-Nov-2025 17:23:42 Asia/Karachi] PHP Warning:  file_get_contents(): SSL: Success in /home/israrlia/test.israrliaqat.shop/google_callback.php on line 29
