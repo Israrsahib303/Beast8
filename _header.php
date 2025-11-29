@@ -1,222 +1,125 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
 
-// --- AUTH CHECK ---
-if (!isset($_SESSION['user_id']) || !$_SESSION['is_admin']) {
-    header("Location: ../login.php");
-    exit;
+// --- 1. REQUIRED FILES ---
+if (file_exists(__DIR__ . '/../includes/helpers.php')) {
+    require_once __DIR__ . '/../includes/helpers.php';
+}
+if (file_exists(__DIR__ . '/../includes/db.php')) {
+    require_once __DIR__ . '/../includes/db.php'; 
 }
 
-require_once __DIR__ . '/../includes/config.php';
-require_once __DIR__ . '/../includes/db.php';
-require_once __DIR__ . '/../includes/helpers.php';
+// --- 2. USER BALANCE LOGIC ---
+$user_id = $_SESSION['user_id'] ?? 0;
+$user_balance = 0.00;
 
-$current_page = basename($_SERVER['PHP_SELF']);
+if ($user_id > 0) {
+    if (function_exists('getUserBalance')) {
+        $user_balance = getUserBalance($user_id);
+    } else {
+        $stmt = $db->prepare("SELECT balance FROM users WHERE id = ?");
+        $stmt->execute([$user_id]);
+        $user_balance = $stmt->fetchColumn() ?? 0.00;
+    }
+}
+
+// --- 3. SITE SETTINGS ---
+$site_name = $GLOBALS['settings']['site_name'] ?? 'SubHub';
+$site_logo = $GLOBALS['settings']['site_logo'] ?? '';
+$primary_color = '#2563eb'; 
+
+// --- 4. CURRENCY SETUP ---
+// Currency List get karein (helpers.php se)
+$curr_list = function_exists('getCurrencyList') ? getCurrencyList() : ['PKR' => ['rate'=>1, 'symbol'=>'Rs', 'flag'=>'🇵🇰', 'name'=>'Pakistani Rupee']];
+$curr_code = $_COOKIE['site_currency'] ?? 'PKR';
+if (!isset($curr_list[$curr_code])) $curr_code = 'PKR';
+
+$curr_data = $curr_list[$curr_code];
+$curr_flag = $curr_data['flag'];
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Panel - <?= $GLOBALS['settings']['site_name'] ?? 'SubHub' ?></title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
     
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
-    <link rel="stylesheet" href="../assets/css/admin.css">
-    
+    <meta name="theme-color" content="<?php echo $primary_color; ?>">
+    <meta name="msapplication-navbutton-color" content="<?php echo $primary_color; ?>">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+    <title><?php echo sanitize($site_name); ?></title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
     <style>
         :root {
-            --primary-color: #4f46e5;
-            --sidebar-width: 260px;
+            /* --- Theme Colors --- */
+            --primary: #2563eb;         
+            --primary-dark: #1d4ed8;    
+            --primary-light: #eff6ff;   
+            
+            --bg-body: #f8fafc;         
+            --bg-card: #ffffff;         
+            
+            --text-main: #0f172a;       
+            --text-sub: #64748b;        
+            --border: #e2e8f0;          
+            
+            /* --- Layout Dimensions --- */
+            --nav-height: -10px;         
+            --container-width: 700px;
+            
+            /* --- Effects --- */
+            --radius: 16px;
+            --shadow: 0 4px 20px rgba(0,0,0,0.03);
+            --transition: 0.2s ease-in-out;
         }
-        
+
+        /* --- CSS Reset --- */
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; outline: none; }
+
         body {
-            background-color: #f3f4f6;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            font-size: 15px;
+            line-height: 1.6;
+            padding-top: calc(var(--nav-height) + 20px);
+            min-height: 100vh;
+            overflow-x: hidden; 
         }
 
-        /* Sidebar Styles */
-        .sidebar {
-            width: var(--sidebar-width);
-            height: 100vh;
-            position: fixed;
-            top: 0; left: 0;
-            background: #fff;
-            border-right: 1px solid #e5e7eb;
-            padding-top: 20px;
-            z-index: 1000;
-            overflow-y: auto;
+        a { text-decoration: none; color: inherit; transition: var(--transition); }
+        ul { list-style: none; }
+        button { font-family: inherit; cursor: pointer; }
+        img { max-width: 100%; display: block; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
         
-        .sidebar-brand {
-            padding: 0 25px 20px;
-            font-size: 1.5rem;
-            font-weight: 800;
-            color: var(--primary-color);
-            border-bottom: 1px solid #f3f4f6;
-            margin-bottom: 20px;
-            display: flex; align-items: center; gap: 10px;
+        .main-content-wrapper {
+            animation: fadeIn 0.5s ease-out forwards;
+            width: 100%;
+            max-width: var(--container-width);
+            margin: 0 auto;
+            padding: 0 20px; 
         }
 
-        .nav-link {
-            color: #4b5563;
-            padding: 12px 25px;
-            font-weight: 500;
-            display: flex; align-items: center; gap: 12px;
-            transition: 0.2s;
-            border-left: 4px solid transparent;
-        }
-        
-        .nav-link:hover {
-            background-color: #f9fafb;
-            color: var(--primary-color);
-        }
-        
-        .nav-link.active {
-            background-color: #eef2ff;
-            color: var(--primary-color);
-            border-left-color: var(--primary-color);
-        }
-        
-        .nav-link i { width: 20px; text-align: center; font-size: 1.1rem; }
+        /* --- Custom Scrollbar --- */
+        ::-webkit-scrollbar { width: 7px; height: 7px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
-        /* Content Area */
-        .main-content {
-            margin-left: var(--sidebar-width);
-            padding: 30px;
-            transition: 0.3s;
-        }
-
-        /* Mobile Toggle */
-        .mobile-toggle { display: none; position: fixed; top: 15px; right: 15px; z-index: 1100; }
-        
-        @media (max-width: 768px) {
-            .sidebar { transform: translateX(-100%); transition: 0.3s; }
-            .sidebar.show { transform: translateX(0); }
-            .main-content { margin-left: 0; }
-            .mobile-toggle { display: block; }
-        }
-        
-        /* Section Headers */
-        .nav-header {
-            font-size: 0.75rem;
-            text-transform: uppercase;
-            color: #9ca3af;
-            padding: 20px 25px 10px;
-            font-weight: 700;
-            letter-spacing: 0.5px;
-        }
     </style>
 </head>
 <body>
 
-    <button class="btn btn-primary mobile-toggle" onclick="document.querySelector('.sidebar').classList.toggle('show')">
-        <i class="fas fa-bars"></i>
-    </button>
+<?php include '_nav.php'; ?>
 
-    <div class="sidebar">
-        <div class="sidebar-brand">
-            <i class="fas fa-bolt"></i> Admin Panel
-        </div>
-        
-        <nav class="nav flex-column">
-            <div class="nav-header">Main</div>
-            <a class="nav-link <?= ($current_page == 'index.php') ? 'active' : '' ?>" href="index.php">
-                <i class="fas fa-home"></i> Dashboard
-            </a>
-            <a class="nav-link <?= ($current_page == 'orders.php') ? 'active' : '' ?>" href="orders.php">
-                <i class="fas fa-shopping-bag"></i> Sub Orders
-            </a>
-            <a class="nav-link <?= ($current_page == 'smm_orders.php') ? 'active' : '' ?>" href="smm_orders.php">
-                <i class="fas fa-rocket"></i> SMM Orders
-            </a>
-            <a class="nav-link <?= ($current_page == 'users.php') ? 'active' : '' ?>" href="users.php">
-                <i class="fas fa-users"></i> Users
-            </a>
-            
-            <div class="nav-header">Finance</div>
-            <a class="nav-link <?= ($current_page == 'payments.php') ? 'active' : '' ?>" href="payments.php">
-                <i class="fas fa-wallet"></i> Payments
-            </a>
-            <a class="nav-link <?= ($current_page == 'methods.php') ? 'active' : '' ?>" href="methods.php">
-                <i class="fas fa-university"></i> Methods
-            </a>
-             <a class="nav-link <?= ($current_page == 'promo_codes.php') ? 'active' : '' ?>" href="promo_codes.php">
-                <i class="fas fa-tag"></i> Promo Codes
-            </a>
-            
-            <div class="nav-header">Services</div>
-            <a class="nav-link <?= ($current_page == 'categories.php') ? 'active' : '' ?>" href="categories.php">
-                <i class="fas fa-list"></i> Categories
-            </a>
-            <a class="nav-link <?= ($current_page == 'products.php') ? 'active' : '' ?>" href="products.php">
-                <i class="fas fa-box"></i> Products
-            </a>
-             <a class="nav-link <?= ($current_page == 'smm_categories.php') ? 'active' : '' ?>" href="smm_categories.php">
-                <i class="fas fa-layer-group"></i> SMM Categories
-            </a>
-            <a class="nav-link <?= ($current_page == 'smm_services.php') ? 'active' : '' ?>" href="smm_services.php">
-                <i class="fas fa-list-ul"></i> SMM Services
-            </a>
-
-            <div class="nav-header">Tools & Updates</div>
-            
-            <a class="nav-link <?= ($current_page == 'broadcast.php') ? 'active' : '' ?>" href="broadcast.php">
-                <i class="fas fa-bullhorn"></i> Broadcasts
-            </a>
-
-            <a class="nav-link <?= ($current_page == 'updates_log.php') ? 'active' : '' ?>" href="updates_log.php">
-                <i class="fas fa-history"></i> Updates Log
-            </a>
-            
-            <a class="nav-link <?= ($current_page == 'wheel_prizes.php') ? 'active' : '' ?>" href="wheel_prizes.php">
-                <i class="fas fa-dharmachakra"></i> Spin Wheel
-            </a>
-            <a class="nav-link <?= ($current_page == 'tickets.php') ? 'active' : '' ?>" href="tickets.php">
-    <i class="fas fa-headset"></i> Support Tickets
-</a>
-
-<a class="nav-link <?= ($current_page == 'testimonials.php') ? 'active' : '' ?>" href="testimonials.php">
-    <i class="fas fa-video"></i> Video Rewards
-</a>
-        <a class="nav-link <?= ($current_page == 'tutorials.php') ? 'active' : '' ?>" href="tutorials.php">
-    <i class="fa-solid fa-arrow-up-from-bracket"></i> tutorials manage
-</a>    
-            <div class="nav-header">System</div>
-            <a class="nav-link <?= ($current_page == 'providers.php') ? 'active' : '' ?>" href="providers.php">
-                <i class="fas fa-server"></i> Providers
-            </a>
-             <a class="nav-link <?= ($current_page == 'cron_jobs.php') ? 'active' : '' ?>" href="cron_jobs.php">
-                <i class="fas fa-clock"></i> Cron Jobs
-            </a>
-            <a class="nav-link <?= ($current_page == 'smm_logs.php') ? 'active' : '' ?>" href="smm_logs.php">
-                <i class="fas fa-file-alt"></i> Logs
-            </a>
-            <a class="nav-link <?= ($current_page == 'settings.php') ? 'active' : '' ?>" href="settings.php">
-                <i class="fas fa-cog"></i> Settings
-            </a>
-            <a class="nav-link <?= ($current_page == 'google_settings.php') ? 'active' : '' ?>" href="google_settings.php">
-    <i class="fab fa-google"></i> Google Login
-</a>
-            <a class="nav-link" href="downloads_manager.php"><i class="fas fa-download"></i> Downloads Manager</a>
-            <a class="nav-link text-danger mt-3" href="../logout.php">
-                <i class="fas fa-sign-out-alt"></i> Logout
-            </a>
-        </nav>
-    </div>
-
-    <div class="main-content">
-        <?php if (isset($_GET['success'])): ?>
-            <div class="alert alert-success alert-dismissible fade show" role="alert">
-                Action completed successfully!
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            </div>
-        <?php endif; ?>
-        
-        <?php if (isset($_GET['error'])): ?>
-            <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                An error occurred!
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            </div>
-        <?php endif; ?>
+<div class="main-content-wrapper">

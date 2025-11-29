@@ -1,285 +1,253 @@
 <?php
-include '_header.php'; 
-require_once __DIR__ . '/../includes/smm_api.class.php';
+// Naye SMM Header aur Footer files istemal karein
+include '_smm_header.php'; 
 
-// --- NAYI SQL Queries (Sirf SMM ke liye) ---
+$error = '';
+$user_id = (int)$_SESSION['user_id']; // User ID yahan define karein
+
+// --- SMM Dashboard Stats ke liye SQL Queries ---
 try {
-    // 1. Total SMM Revenue (Jo user ne pay kiya)
-    $smm_total_revenue = $db->query("SELECT SUM(charge) FROM smm_orders")->fetchColumn() ?? 0;
+    // 1. Total SMM Spend
+    $stmt_spend = $db->prepare("SELECT SUM(charge) FROM smm_orders WHERE user_id = ?");
+    $stmt_spend->execute([$user_id]);
+    $smm_total_spend = $stmt_spend->fetchColumn() ?? 0;
 
     // 2. Total SMM Orders
-    $smm_total_orders = $db->query("SELECT COUNT(id) FROM smm_orders")->fetchColumn() ?? 0;
+    $stmt_orders = $db->prepare("SELECT COUNT(id) FROM smm_orders WHERE user_id = ?");
+    $stmt_orders->execute([$user_id]);
+    $smm_total_orders = $stmt_orders->fetchColumn() ?? 0;
 
-    // 3. SMM Orders (Pending)
-    $smm_pending_orders = $db->query("SELECT COUNT(id) FROM smm_orders WHERE status = 'pending'")->fetchColumn() ?? 0;
-
-    // 4. SMM Orders (In Progress)
-    $smm_in_progress = $db->query("SELECT COUNT(id) FROM smm_orders WHERE status = 'in_progress'")->fetchColumn() ?? 0;
+    // 3. In Progress Orders
+    $stmt_progress = $db->prepare("SELECT COUNT(id) FROM smm_orders WHERE user_id = ? AND status = 'in_progress'");
+    $stmt_progress->execute([$user_id]);
+    $smm_in_progress = $stmt_progress->fetchColumn() ?? 0;
     
-    // 5. Total SMM Profit (Asal Munafa)
-    $stmt_profit = $db->query("
-        SELECT SUM(o.charge - ( (o.quantity / 1000) * s.base_price )) 
-        FROM smm_orders o
-        JOIN smm_services s ON o.service_id = s.id
-        WHERE o.status = 'completed' OR o.status = 'partial'
+    // 4. Completed Orders
+    $stmt_completed = $db->prepare("SELECT COUNT(id) FROM smm_orders WHERE user_id = ? AND status = 'completed'");
+    $stmt_completed->execute([$user_id]);
+    $smm_completed = $stmt_completed->fetchColumn() ?? 0;
+    
+    // 5. Graph ke liye (Last 7 Days Spend)
+    $stmt_graph = $db->prepare("
+        SELECT 
+            DATE(created_at) as order_date, 
+            SUM(charge) as total_spend
+        FROM smm_orders
+        WHERE user_id = ? AND created_at >= CURDATE() - INTERVAL 7 DAY
+        GROUP BY DATE(created_at)
+        ORDER BY order_date ASC
     ");
-    $smm_total_profit = $stmt_profit->fetchColumn() ?? 0;
+    $stmt_graph->execute([$user_id]);
+    $graph_data = $stmt_graph->fetchAll();
     
-    // 6. Provider Balance (Live API Call)
-    $provider_balance = 'N/A';
-    $provider_currency = '';
-    $stmt_provider = $db->query("SELECT * FROM smm_providers WHERE is_active = 1 LIMIT 1");
-    $provider = $stmt_provider->fetch();
-    if ($provider) {
-        $api = new SmmApi($provider['api_url'], $provider['api_key']);
-        $balance_result = $api->getBalance();
-        if ($balance_result['success']) {
-            $provider_balance = number_format($balance_result['balance'], 2);
-            $provider_currency = $balance_result['currency'];
-        } else {
-            $provider_balance = 'Error';
+    // Graph ke liye data tayyar karein
+    $graph_labels = [];
+    $graph_values = [];
+    $dates = [];
+    // Pehle 7 din ki dates set karein (0 spend ke sath)
+    for ($i = 6; $i >= 0; $i--) {
+        $date = date('Y-m-d', strtotime("-$i days"));
+        $dates[$date] = 0;
+        $graph_labels[] = date('D, j M', strtotime($date));
+    }
+    // Database se milne wali values ko update karein
+    foreach ($graph_data as $data) {
+        if (isset($dates[$data['order_date']])) {
+            $dates[$data['order_date']] = (float)$data['total_spend'];
         }
     }
-    
-    // 7. Recent SMM Orders
-    $stmt_recent = $db->query("
-        SELECT o.*, u.email, s.name 
-        FROM smm_orders o
-        JOIN users u ON o.user_id = u.id
-        JOIN smm_services s ON o.service_id = s.id
-        ORDER BY o.created_at DESC
-        LIMIT 5
-    ");
-    $recent_smm_orders = $stmt_recent->fetchAll();
+    $graph_values = array_values($dates); // Sirf values nikal lein
 
 } catch (PDOException $e) {
-    echo "<div class='message error'>Failed to load SMM dashboard stats: " . $e->getMessage() . "</div>";
+    $error = "Failed to load dashboard stats: " . $e->getMessage();
+    $smm_total_spend = $smm_total_orders = $smm_in_progress = $smm_completed = 0;
+    $graph_labels = [];
+    $graph_values = [];
 }
-
-// --- NAYA FEATURE: System Health Function ---
-function getCronJobStatus() {
-    $log_files = [
-        'Order Placer' => 'smm_order_placer.log',
-        'Status Sync' => 'smm_status_sync.log',
-        'Service Sync' => 'smm_service_sync.log',
-        'Email Payments' => 'email_payments.log'
-    ];
-    
-    $log_dir = __DIR__ . '/../assets/logs/';
-    $status_data = [];
-    $now = new DateTime();
-
-    foreach ($log_files as $name => $file) {
-        $file_path = $log_dir . $file;
-        $status_text = 'Not Run Yet';
-        $status_class = 'status-unknown';
-
-        if (file_exists($file_path)) {
-            $file_mod_time = filemtime($file_path);
-            $last_run = new DateTime('@' . $file_mod_time);
-            $diff = $now->getTimestamp() - $last_run->getTimestamp(); // seconds
-
-            if ($diff < 300) { // 5 minutes
-                $status_text = 'Running OK';
-                $status_class = 'status-ok';
-            } elseif ($diff < 3600) { // 1 hour
-                $status_text = 'Warning';
-                $status_class = 'status-warning';
-            } else { // Over 1 hour
-                $status_text = 'CRITICAL DOWN';
-                $status_class = 'status-down';
-            }
-            
-            // Time formatting
-            if ($diff < 60) {
-                 $time_ago = $diff . ' sec ago';
-            } elseif ($diff < 3600) {
-                 $time_ago = floor($diff / 60) . ' min ago';
-            } else {
-                 $time_ago = floor($diff / 3600) . ' hr ago';
-            }
-
-            $status_data[] = [
-                'name' => $name,
-                'time_ago' => $time_ago,
-                'status_text' => $status_text,
-                'status_class' => $status_class
-            ];
-
-        } else {
-            $status_data[] = [
-                'name' => $name,
-                'time_ago' => 'N/A',
-                'status_text' => 'Log File Missing',
-                'status_class' => 'status-down'
-            ];
-        }
-    }
-    return $status_data;
-}
-
-$system_health = getCronJobStatus();
-// --- NAYA FEATURE ENDS ---
+// --- SQL LOGIC KHATAM ---
 ?>
 
 <style>
+    @keyframes fadeInUp {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
     @keyframes pulseGlow {
-        0% { box-shadow: 0 0 10px rgba(40, 167, 69, 0.2); }
-        50% { box-shadow: 0 0 20px rgba(40, 167, 69, 0.6); }
-        100% { box-shadow: 0 0 10px rgba(40, 167, 69, 0.2); }
+        0% { box-shadow: 0 0 10px rgba(13, 110, 253, 0.2); }
+        50% { box-shadow: 0 0 20px rgba(13, 110, 253, 0.5); }
+        100% { box-shadow: 0 0 10px rgba(13, 110, 253, 0.2); }
     }
-    .stat-card .positive { color: #28a745; }
-    .stat-card .negative { color: #dc3545; }
-    .stat-card .live-balance {
-        color: #007bff;
-        animation: pulseGlow 2s infinite;
-    }
-    
-    /* --- NAYA CSS: System Health Box --- */
-    .system-health-card {
-        background: #fff;
-        border: 1px solid #e0e0e0;
+
+    .smm-header {
+        background: var(--app-white);
         border-radius: 12px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.03);
-        margin-top: 25px;
-    }
-    .system-health-card h2 {
-        font-size: 20px;
-        font-weight: 600;
-        color: #333;
-        padding: 20px 25px;
-        margin: 0;
-        border-bottom: 1px solid #f0f0f0;
-    }
-    .health-list {
-        padding: 0;
-        margin: 0;
-    }
-    .health-item {
+        padding: 1.5rem;
+        border: 1px solid #eee;
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 18px 25px;
-        border-bottom: 1px solid #f5f5f5;
-        font-size: 15px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        animation: fadeInUp 0.5s ease-out;
     }
-    .health-item:last-child {
-        border-bottom: none;
-    }
-    .health-item .job-name {
+    .smm-header .balance-info p {
+        font-size: 0.9rem;
+        color: var(--app-text-muted);
+        margin: 0;
         font-weight: 600;
-        color: #555;
     }
-    .health-item .job-status {
+    .smm-header .balance-info h2 {
+        font-size: 2.2rem;
+        color: var(--app-primary);
+        margin: 0;
+        font-weight: 700;
+    }
+    .smm-header .btn-add-funds-app {
+        background: var(--app-grad-blue);
+        color: white;
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        font-size: 2rem;
+        font-weight: 300;
+        text-decoration: none;
         display: flex;
         align-items: center;
+        justify-content: center;
+        animation: pulseGlow 2s infinite;
+    }
+
+    .smm-dashboard {
+        margin-top: 2rem;
+        animation: fadeInUp 0.5s ease-out 0.2s;
+        opacity: 0;
+        animation-fill-mode: forwards;
+    }
+    .smm-stat-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr; /* 2 columns on mobile */
         gap: 15px;
+        margin-bottom: 1rem;
     }
-    .health-item .time-ago {
-        color: #777;
-        font-size: 14px;
+    @media (min-width: 768px) {
+        .smm-stat-grid {
+            grid-template-columns: 1fr 1fr 1fr 1fr; /* 4 columns on desktop */
+        }
     }
-    .health-item .status-badge {
+    .smm-stat-card {
+        background: var(--app-white);
+        border-radius: 12px;
+        padding: 15px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        border: 1px solid #eee;
+        transition: all 0.2s ease-in-out;
+    }
+    .smm-stat-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.08);
+    }
+    .smm-stat-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+    .smm-stat-icon svg { width: 20px; height: 20px; color: white; }
+    .smm-stat-icon.icon-total-spent { background: var(--app-grad-blue); }
+    .smm-stat-icon.icon-total-orders { background: var(--app-grad-orange); }
+    .smm-stat-icon.icon-in-progress { background: linear-gradient(135deg, #198754 0%, #157347 100%); }
+    .smm-stat-icon.icon-completed { background: linear-gradient(135deg, #6C757D 0%, #5A6268 100%); }
+    
+    .smm-stat-info p {
+        font-size: 0.8rem;
+        color: var(--app-text-muted);
+        margin: 0;
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .smm-stat-info h3 {
+        font-size: 1.3rem;
+        color: var(--app-dark);
+        margin: 0;
         font-weight: 700;
-        padding: 5px 10px;
-        border-radius: 20px;
-        font-size: 12px;
-        text-transform: uppercase;
     }
-    .health-item .status-ok {
-        background-color: rgba(40, 167, 69, 0.1);
-        color: #28a745;
+    .smm-graph-container {
+        background: var(--app-white);
+        border-radius: 12px;
+        padding: 1.5rem;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        border: 1px solid #eee;
     }
-    .health-item .status-warning {
-        background-color: rgba(255, 193, 7, 0.1);
-        color: #ffc107;
-    }
-    .health-item .status-down {
-        background-color: rgba(220, 53, 69, 0.1);
-        color: #dc3545;
-    }
-    .health-item .status-unknown {
-        background-color: #f0f0f0;
-        color: #666;
-    }
-    /* --- NAYA CSS ENDS --- */
 </style>
-
-<h1>SMM Panel Dashboard</h1>
-
-<div class="stat-grid">
-    <div class="stat-card">
-        <h3>SMM Total Revenue</h3>
-        <p class="positive"><?php echo formatCurrency($smm_total_revenue); ?></p>
+<div class="smm-header">
+    <div class="balance-info">
+        <p>SMM Wallet Balance</p>
+        <h2><?php echo formatCurrency($user_balance); ?></h2>
     </div>
-    <div class="stat-card">
-        <h3>SMM Total Profit</h3>
-        <p class="positive"><?php echo formatCurrency($smm_total_profit); ?></p>
-    </div>
-    <div class="stat-card">
-        <h3>SMM Total Orders</h3>
-        <p><?php echo number_format($smm_total_orders); ?></p>
-    </div>
-    <div class="stat-card">
-        <h3>Orders Pending</h3>
-        <p class="negative"><?php echo number_format($smm_pending_orders); ?></p>
-    </div>
-    <div class="stat-card">
-        <h3>Orders In Progress</h3>
-        <p><?php echo number_format($smm_in_progress); ?></p>
-    </div>
-     <div class="stat-card">
-        <h3>Provider Balance</h3>
-        <p class="live-balance"><?php echo $provider_balance . ' ' . $provider_currency; ?></p>
-    </div>
+    <a href="add-funds.php" class="btn-add-funds-app">+</a>
 </div>
 
-<div class="system-health-card">
-    <h2>System Health (Cron Heartbeat)</h2>
-    <ul class="health-list">
-        <?php foreach ($system_health as $job): ?>
-            <li class="health-item">
-                <span class="job-name"><?php echo $job['name']; ?></span>
-                <span class="job-status">
-                    <span class="time-ago"><?php echo $job['time_ago']; ?></span>
-                    <span class="status-badge <?php echo $job['status_class']; ?>">
-                        <?php echo $job['status_text']; ?>
-                    </span>
-                </span>
-            </li>
-        <?php endforeach; ?>
-    </ul>
-</div>
-<h2>Recent SMM Orders</h2>
-<div class="admin-table-responsive">
-    <table class="admin-table">
-        <thead>
-            <tr>
-                <th>Order ID</th>
-                <th>User</th>
-                <th>Service</th>
-                <th>Charge</th>
-                <th>Status</th>
-                <th>Provider ID</th>
-            </tr>
-        </thead>
-        <tbody>
-            <?php if (empty($recent_smm_orders)): ?>
-                <tr><td colspan="6" style="text-align: center;">No recent SMM orders.</td></tr>
-            <?php else: ?>
-                <?php foreach ($recent_smm_orders as $order): ?>
-                <tr>
-                    <td><strong>#<?php echo $order['id']; ?></strong></td>
-                    <td><?php echo sanitize($order['email']); ?></td>
-                    <td><?php echo sanitize($order['name']); ?></td>
-                    <td><?php echo formatCurrency($order['charge']); ?></td>
-                    <td><span class="status-badge status-<?php echo str_replace(' ', '_', strtolower($order['status'])); ?>"><?php echo ucfirst($order['status']); ?></span></td>
-                    <td><?php echo $order['provider_order_id'] ?? 'N/A'; ?></td>
-                </tr>
-                <?php endforeach; ?>
-            <?php endif; ?>
-        </tbody>
-    </table>
-</div>
+<?php if ($error): ?><div class="app-message app-error"><?php echo urldecode($error); ?></div><?php endif; ?>
 
-<?php include '_footer.php'; ?>
+<div class="smm-dashboard">
+    <div class="smm-stat-grid">
+        <div class="smm-stat-card">
+            <div class="smm-stat-icon icon-total-spent">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+            </div>
+            <div class="smm-stat-info">
+                <p>Total Spent</p>
+                <h3><?php echo formatCurrency($smm_total_spend); ?></h3>
+            </div>
+        </div>
+        
+        <div class="smm-stat-card">
+            <div class="smm-stat-icon icon-total-orders">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path></svg>
+            </div>
+            <div class="smm-stat-info">
+                <p>Total Orders</p>
+                <h3><?php echo number_format($smm_total_orders); ?></h3>
+            </div>
+        </div>
+        
+        <div class="smm-stat-card">
+            <div class="smm-stat-icon icon-in-progress">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg>
+            </div>
+            <div class="smm-stat-info">
+                <p>In Progress</p>
+                <h3><?php echo number_format($smm_in_progress); ?></h3>
+            </div>
+        </div>
+        
+        <div class="smm-stat-card">
+            <div class="smm-stat-icon icon-completed">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+            </div>
+            <div class="smm-stat-info">
+                <p>Completed</p>
+                <h3><?php echo number_format($smm_completed); ?></h3>
+            </div>
+        </div>
+    </div>
+    
+    <div class="smm-graph-container">
+        <h3 style="font-size: 1.1rem; margin-bottom: 1rem; color: var(--app-dark);">Last 7 Days Spending</h3>
+        <canvas id="smm-spending-chart"></canvas>
+    </div>
+</div>
+<script>
+    // Graph ka data PHP se JS mein lein
+    window.smmGraphLabels = <?php echo json_encode($graph_labels); ?>;
+    window.smmGraphValues = <?php echo json_encode($graph_values); ?>;
+</script>
+
+<?php include '_smm_footer.php'; // Naya SMM Footer istemal karein ?>

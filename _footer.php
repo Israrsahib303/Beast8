@@ -1,209 +1,220 @@
-</div> </div> <div id="loading-overlay"><div id="loading-spinner"></div><span id="loading-text">Processing...</span></div>
+<div style="height: 100px;"></div>
 
-<div id="jarvis-container">
-    <div id="jarvis-status">SYSTEM ONLINE</div>
-    <div id="jarvis-arc" onclick="toggleJarvis()" title="Tap to Command"></div>
-</div>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.css"/>
+    <script src="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.js.iife.js"></script>
 
-<style>
-    /* --- ARC REACTOR (Iron Man Style) --- */
-    #jarvis-container { position: fixed; bottom: 30px; right: 30px; z-index: 9999; display: flex; flex-direction: column; align-items: flex-end; }
-    
-    #jarvis-arc {
-        width: 75px; height: 75px; border-radius: 50%;
-        background: radial-gradient(circle, #60a5fa 10%, #2563eb 60%, #1e3a8a 100%);
-        box-shadow: 0 0 20px #3b82f6, 0 0 40px #2563eb, inset 0 0 15px #fff;
-        border: 3px solid #93c5fd; cursor: pointer;
-        transition: all 0.3s ease; animation: breathe 4s infinite;
-        display: flex; align-items: center; justify-content: center;
-    }
-    #jarvis-arc::after { content: '🎙️'; font-size: 30px; filter: drop-shadow(0 0 5px rgba(0,0,0,0.5)); }
-    #jarvis-arc:hover { transform: scale(1.1); box-shadow: 0 0 60px #3b82f6; }
-    
-    #jarvis-arc.listening {
-        background: radial-gradient(circle, #f87171 10%, #dc2626 60%, #7f1d1d 100%);
-        box-shadow: 0 0 30px #ef4444, 0 0 60px #b91c1c;
-        animation: pulse-fast 1s infinite;
-        border-color: #fecaca;
-    }
-    #jarvis-arc.listening::after { content: '👂'; }
-    
-    #jarvis-arc.speaking {
-        background: radial-gradient(circle, #facc15 10%, #ca8a04 60%, #713f12 100%);
-        box-shadow: 0 0 40px #eab308;
-        animation: pulse-slow 0.5s infinite;
-        border-color: #fef08a;
-    }
-    #jarvis-arc.speaking::after { content: '🔊'; }
-
-    /* Status Box */
-    #jarvis-status {
-        background: rgba(15, 23, 42, 0.9); color: #0ea5e9;
-        padding: 12px 20px; border-radius: 12px; border: 1px solid #0284c7;
-        font-family: 'Courier New', monospace; font-weight: 900;
-        display: none; font-size: 13px; margin-bottom: 15px;
-        text-transform: uppercase; letter-spacing: 1px;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.5); backdrop-filter: blur(5px);
-    }
-    
-    @keyframes breathe { 0%,100% { box-shadow: 0 0 20px #2563eb; } 50% { box-shadow: 0 0 40px #2563eb; } }
-    @keyframes pulse-fast { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
-    @keyframes pulse-slow { 0% { box-shadow: 0 0 10px #eab308; } 50% { box-shadow: 0 0 30px #eab308; } 100% { box-shadow: 0 0 10px #eab308; } }
-    
-    /* Loading Overlay */
-    #loading-overlay { position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(255,255,255,0.8); z-index: 10000; display: none; align-items: center; justify-content: center; flex-direction: column; }
-    #loading-overlay.active { display: flex; }
-    #loading-spinner { width: 50px; height: 50px; border: 5px solid #f3f3f3; border-top: 5px solid #4f46e5; border-radius: 50%; animation: spin 1s linear infinite; }
-    @keyframes spin { 100% { transform: rotate(360deg); } }
-</style>
-
-<script>
-    const arc = document.getElementById('jarvis-arc');
-    const status = document.getElementById('jarvis-status');
-    let recognition;
-    
-    // --- 1. POWERFUL VOICE ENGINE (With Fallback) ---
-    function speak(text) {
-        // Show Text
-        status.innerText = "JARVIS: " + text;
-        status.style.display = 'block';
-        setTimeout(() => { if(status.innerText.includes("JARVIS")) status.style.display = 'none'; }, 6000);
-
-        // Stop any ongoing speech
-        window.speechSynthesis.cancel();
-
-        const speech = new SpeechSynthesisUtterance(text);
-        speech.pitch = 0.7; // Deep Male Pitch
-        speech.rate = 1.0;  // Steady Speed
-        speech.volume = 1;  // Max Volume
-
-        // Voice Hunting Logic
-        let voices = window.speechSynthesis.getVoices();
+    <script>
+    document.addEventListener("DOMContentLoaded", function() {
         
-        // Priority 1: Google US English (Best Male)
-        let voice = voices.find(v => v.name.includes("Google US English"));
+        const driver = window.driver.js.driver;
+        const path = window.location.pathname;
         
-        // Priority 2: Microsoft David (Windows Default Male)
-        if (!voice) voice = voices.find(v => v.name.includes("David"));
-        
-        // Priority 3: Any English Voice
-        if (!voice) voice = voices.find(v => v.lang.includes("en"));
+        // --- THEME CONFIG ---
+        const tourConfig = {
+            showProgress: true,
+            animate: true,
+            allowClose: true,
+            doneBtnText: "Finish 🚀",
+            nextBtnText: "Next ➔",
+            prevBtnText: "Back",
+            popoverClass: 'premium-tour-popover', // Custom Class
+            progressText: 'Step {{current}} of {{total}}'
+        };
 
-        if (voice) {
-            speech.voice = voice;
-            console.log("Jarvis Voice Set To:", voice.name);
-        } else {
-            console.warn("No specific male voice found. Using default.");
-        }
-
-        // Animation trigger
-        arc.className = ''; 
-        arc.classList.add('speaking');
-        
-        speech.onend = () => { arc.className = ''; };
-        speech.onerror = (e) => { console.error("Speech Error:", e); };
-        
-        window.speechSynthesis.speak(speech);
-    }
-
-    // --- 2. BRAIN CONNECTION ---
-    function askJarvis(query) {
-        arc.className = ''; 
-        arc.classList.add('speaking'); // Yellow mode
-        status.innerText = "PROCESSING...";
-        status.style.display = 'block';
-
-        let formData = new FormData();
-        formData.append('query', query);
-        formData.append('current_page', window.location.pathname);
-
-        fetch('../includes/jarvis_logic.php', { method: 'POST', body: formData })
-        .then(res => res.text())
-        .then(raw => {
-            console.log("AI Response:", raw);
-            
-            if(!raw.includes('|')) {
-                speak(raw); return;
+        // Helper to run tour
+        function runTour(key, steps) {
+            if (!localStorage.getItem(key)) {
+                const tour = driver({
+                    ...tourConfig,
+                    steps: steps,
+                    onDestroyStarted: () => {
+                        localStorage.setItem(key, 'true');
+                        tour.destroy();
+                    },
+                });
+                setTimeout(() => tour.drive(), 1000);
             }
-
-            let parts = raw.split('|');
-            let type = parts[0];
-            let payload = parts[1];
-            let msg = parts[2] || payload;
-
-            if (type == 'NAV') {
-                speak(msg);
-                setTimeout(() => window.location.href = payload, 1500);
-            } 
-            else if (type == 'REFRESH') {
-                speak(msg);
-                setTimeout(() => location.reload(), 2000);
-            }
-            else {
-                speak(payload); // Talk
-            }
-        })
-        .catch(err => {
-            arc.className = '';
-            speak("Sir, network connection weak hai.");
-        });
-    }
-
-    // --- 3. LISTENER ---
-    function toggleJarvis() {
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SpeechRecognition) { 
-            alert("Voice Control requires Google Chrome."); 
-            return; 
         }
 
-        if (!recognition) {
-            recognition = new SpeechRecognition();
-            recognition.lang = 'en-US'; 
-            
-            recognition.onstart = () => { 
-                arc.className = 'listening'; 
-                status.innerText = "LISTENING..."; 
-                status.style.display = 'block'; 
-                window.speechSynthesis.cancel();
-            };
-            
-            recognition.onend = () => { arc.className = ''; };
-            
-            recognition.onresult = (event) => {
-                const command = event.results[0][0].transcript;
-                status.innerText = "YOU: " + command;
-                askJarvis(command);
-            };
-            
-            recognition.onerror = (event) => {
-                console.error("Mic Error:", event.error);
-                status.innerText = "MIC ERROR";
-            };
-        }
-        recognition.start();
-    }
-    
-    // Load voices immediately
-    window.speechSynthesis.onvoiceschanged = function() {
-        window.speechSynthesis.getVoices();
-    };
-
-    // Auto Welcome
-    window.addEventListener('load', () => {
-        if (!sessionStorage.getItem('jarvis_greeted')) {
-            setTimeout(() => {
-                askJarvis("Say greeting: Welcome back Sir Israr."); 
-                sessionStorage.setItem('jarvis_greeted', 'true');
-            }, 1500);
+        /* ---------------------------------------------------------
+           1. DASHBOARD TOUR
+           --------------------------------------------------------- */
+        if (path.includes('index.php') || path.endsWith('/user/') || path.endsWith('/user')) {
+            runTour('seen_dashboard_v5', [
+                { 
+                    element: '.wallet-card', 
+                    popover: { title: '💳 Digital Wallet', description: 'This is your live balance card. It updates instantly after deposit.' } 
+                },
+                { 
+                    element: '.stats-row', 
+                    popover: { title: '📊 Activity Stats', description: 'Track your total spending and orders in real-time here.' } 
+                },
+                { 
+                    element: '.concierge-box', 
+                    popover: { title: '🧞‍♂️ Request Center', description: 'Need a specific service? Just ask here and we will add it for you!' } 
+                },
+                { 
+                    element: '.filter-header', 
+                    popover: { title: '🏷️ Smart Filters', description: 'Filter services by category to find exactly what you need.' } 
+                },
+                { 
+                    element: '.prod-grid', 
+                    popover: { title: '🛍️ Premium Store', description: 'Browse our exclusive services cards. Click "Get Now" to buy.' } 
+                }
+            ]);
         }
 
-        // Settings Logic (Keep existing)
-        const testButton = document.getElementById('send-test-email-btn');
-        if(testButton) {
-            testButton.addEventListener('click', function() {
-                // Logic preserved in settings.php
-            });
+        /* ---------------------------------------------------------
+           2. NEW ORDER TOUR
+           --------------------------------------------------------- */
+        if (path.includes('smm_order.php')) {
+            runTour('seen_smm_v5', [
+                { 
+                    element: '#platform-grid', 
+                    popover: { title: '📱 Select App', description: 'Start by clicking the app icon (Instagram, TikTok, etc.) you want.' } 
+                },
+                { 
+                    element: '.search-box', 
+                    popover: { title: '🔍 Quick Search', description: 'Type "Likes" or "Followers" here to filter instantly.' } 
+                },
+                { 
+                    element: '#apps-container', 
+                    popover: { title: '📦 Service Cards', description: 'Click any service card to open the detailed order form.' } 
+                }
+            ]);
+        }
+
+        /* ---------------------------------------------------------
+           3. ADD FUNDS TOUR
+           --------------------------------------------------------- */
+        if (path.includes('add-funds.php')) {
+            runTour('seen_funds_v5', [
+                { 
+                    element: '.pay-card', 
+                    popover: { title: '⚡ Instant Deposit', description: 'Use NayaPay/SadaPay for automatic funds addition within seconds.' } 
+                },
+                { 
+                    element: '.promo-box', 
+                    popover: { title: '🎟️ Promo Code', description: 'Have a coupon? Enter it here to claim your FREE Bonus cash!' } 
+                },
+                { 
+                    element: '.pay-card:last-child', 
+                    popover: { title: '📸 Manual Upload', description: 'For JazzCash/Easypaisa, upload your payment screenshot here.' } 
+                }
+            ]);
+        }
+
+        /* ---------------------------------------------------------
+           4. TOOLS TOUR
+           --------------------------------------------------------- */
+        if (path.includes('tools.php')) {
+            runTour('seen_tools_v5', [
+                { 
+                    element: '.cat-tabs', 
+                    popover: { title: '🛠️ Tool Categories', description: 'Switch between Social, SEO, and Developer tools easily.' } 
+                },
+                { 
+                    element: '.tool-card', 
+                    popover: { title: '🎁 Free Forever', description: 'All these premium tools are free. Use them to boost your growth.' } 
+                }
+            ]);
         }
     });
-</script>
+
+    // Function to reset tours (for testing)
+    function resetTours() {
+        Object.keys(localStorage).forEach(k => { if(k.startsWith('seen_')) localStorage.removeItem(k); });
+        location.reload();
+    }
+    </script>
+
+    <style>
+    /* --- 🌟 PREMIUM DRIVER.JS THEME --- */
+    
+    /* The Main Box */
+    .driver-popover.premium-tour-popover {
+        background: rgba(15, 23, 42, 0.95); /* Dark Navy */
+        backdrop-filter: blur(15px);
+        color: #ffffff;
+        border-radius: 20px;
+        padding: 25px;
+        box-shadow: 
+            0 0 0 1px rgba(255, 255, 255, 0.1),
+            0 20px 50px -10px rgba(79, 70, 229, 0.5); /* Purple Glow */
+        border: none;
+        min-width: 300px;
+        font-family: 'Outfit', sans-serif;
+    }
+
+    /* Title with Gradient */
+    .driver-popover-title {
+        font-size: 1.4rem;
+        font-weight: 800;
+        margin-bottom: 10px;
+        background: linear-gradient(135deg, #818cf8 0%, #c084fc 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        letter-spacing: 0.5px;
+    }
+
+    /* Description Text */
+    .driver-popover-description {
+        font-size: 0.95rem;
+        line-height: 1.6;
+        color: #cbd5e1; /* Soft Grey */
+        margin-bottom: 20px;
+    }
+
+    /* Buttons */
+    .driver-popover-footer {
+        margin-top: 15px;
+    }
+
+    .driver-popover-footer button {
+        background: linear-gradient(135deg, #4f46e5, #7c3aed) !important;
+        color: #fff !important;
+        text-shadow: none !important;
+        border: none !important;
+        border-radius: 12px !important;
+        padding: 8px 18px !important;
+        font-size: 0.85rem !important;
+        font-weight: 700 !important;
+        transition: 0.2s !important;
+        box-shadow: 0 4px 15px rgba(79, 70, 229, 0.3) !important;
+    }
+
+    .driver-popover-footer button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(79, 70, 229, 0.5) !important;
+    }
+
+    /* Previous Button (Muted) */
+    .driver-popover-prev-btn {
+        background: rgba(255,255,255,0.1) !important;
+        box-shadow: none !important;
+        border: 1px solid rgba(255,255,255,0.2) !important;
+    }
+
+    /* Close Button */
+    .driver-popover-close-btn {
+        color: #94a3b8 !important;
+        transition: 0.2s;
+    }
+    .driver-popover-close-btn:hover {
+        color: #fff !important;
+        transform: rotate(90deg);
+    }
+
+    /* Arrows (Pointer) */
+    .driver-popover-arrow-side-left.driver-popover-arrow { border-left-color: #0f172a !important; }
+    .driver-popover-arrow-side-right.driver-popover-arrow { border-right-color: #0f172a !important; }
+    .driver-popover-arrow-side-top.driver-popover-arrow { border-top-color: #0f172a !important; }
+    .driver-popover-arrow-side-bottom.driver-popover-arrow { border-bottom-color: #0f172a !important; }
+    </style>
+
+    <footer style="text-align:center; padding:20px; color:#94a3b8; font-size:0.85rem; margin-top:auto;">
+        &copy; <?= date('Y') ?> <?= sanitize($GLOBALS['settings']['site_name'] ?? 'SubHub') ?>. All rights reserved.
+    </footer>
+<?php include_once __DIR__ . '/_broadcast_modal.php'; ?>
+</body>
+</html>
